@@ -1,0 +1,17 @@
+{
+  "vendor": "nvidia",
+  "device": "NVIDIA A10",
+  "dataset": "livejournal",
+  "graph_path": "/root/ppopp-2027/data/cache/livejournal.csr.bin",
+  "N": 4846609,
+  "E": 68475391,
+  "damping": 0.8500000000,
+  "max_iter": 100,
+  "tol": 1.0000000000e-06,
+  "iters_run": 49,
+  "final_l1": 9.5168815051e-07,
+  "wall_ms": 415.989,
+  "output_bin": "/root/ppopp-2027/results/a10_sm86/fp32/livejournal_seed4.bin",
+  "output_crc32": "bd076092",
+  "precision": "fp32"
+}

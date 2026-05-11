@@ -1,0 +1,27 @@
+{
+  "a": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/a10_sm86/fp32/rmat-22_seed1",
+    "vendor": "nvidia",
+    "device": "NVIDIA A10",
+    "crc32": "37ec9717",
+    "iters_run": 9
+  },
+  "b": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/mi300x_vf/fp32/rmat-22_seed2",
+    "vendor": "amd",
+    "device": "AMD Instinct MI300X VF",
+    "crc32": "775ff6bf",
+    "iters_run": 9
+  },
+  "dataset": "rmat-22",
+  "precision": "fp32",
+  "N": 2396110,
+  "byte_diff_fraction": 0.5845061370304369,
+  "max_Linf": 5.3551048040390015e-09,
+  "mean_diff": 1.522033568621182e-13,
+  "L2_norm": 9.542501078765732e-09,
+  "rank_top100_jaccard": 1.0,
+  "rank_top100_kendall": 1.0,
+  "decision": "GO",
+  "decision_reason": "byte_diff_fraction > 1% -> drift confirmed"
+}

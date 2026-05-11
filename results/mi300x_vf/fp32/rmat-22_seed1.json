@@ -1,0 +1,17 @@
+{
+  "vendor": "amd",
+  "device": "AMD Instinct MI300X VF",
+  "dataset": "rmat-22",
+  "graph_path": "data/cache/rmat-22.csr.bin",
+  "N": 2396110,
+  "E": 65244929,
+  "damping": 0.85000002,
+  "max_iter": 100,
+  "tol": 9.99999997e-07,
+  "iters_run": 9,
+  "final_l1": 4.14955423e-07,
+  "wall_ms": 304.856,
+  "output_bin": "results/mi300x_vf/fp32/rmat-22_seed1.bin",
+  "output_crc32": "d82afe3c",
+  "precision": "fp32"
+}

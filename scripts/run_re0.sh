@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# RE0 driver — runs PageRank on every CSR in data/cache/, writes outputs to
-# results/<DEVICE_TAG>/<dataset>_seed<n>.{bin,json} for the current host's GPU.
+# RE0 / RE1 driver — runs PageRank on every CSR in data/cache/ for the current
+# host's GPU and selected precision, writes outputs to
+# results/<DEVICE_TAG>/<PRECISION>/<dataset>_seed<n>.{bin,json}.
 #
 # Usage (matches Paper 2.1 sibling repo build conventions):
-#   GPU_BACKEND=CUDA CUDA_ARCH=86      DEVICE_TAG=a10        ./scripts/run_re0.sh
-#   GPU_BACKEND=CUDA CUDA_ARCH=80      DEVICE_TAG=a100       ./scripts/run_re0.sh
-#   GPU_BACKEND=ROCM HIP_ARCH=gfx942   DEVICE_TAG=mi300x_vf  ./scripts/run_re0.sh
+#   GPU_BACKEND=CUDA CUDA_ARCH=86      DEVICE_TAG=a10        PRECISION=fp32 ./scripts/run_re0.sh
+#   GPU_BACKEND=CUDA CUDA_ARCH=86      DEVICE_TAG=a10        PRECISION=fp64 ./scripts/run_re0.sh
+#   GPU_BACKEND=ROCM HIP_ARCH=gfx942   DEVICE_TAG=mi300x_vf  PRECISION=fp32 ./scripts/run_re0.sh
+#   GPU_BACKEND=ROCM HIP_ARCH=gfx942   DEVICE_TAG=mi300x_vf  PRECISION=fp64 ./scripts/run_re0.sh
 #
 # After running on BOTH vendors (each on its own host), copy the results/
 # subdirectories together and run scripts/compare_all.sh.
@@ -17,6 +19,7 @@ GPU_BACKEND="${GPU_BACKEND:-ROCM}"          # CUDA | ROCM
 CUDA_ARCH="${CUDA_ARCH:-86}"                # used only when GPU_BACKEND=CUDA
 HIP_ARCH="${HIP_ARCH:-gfx942}"              # used only when GPU_BACKEND=ROCM
 DEVICE_TAG="${DEVICE_TAG:-}"                # output subdir name (e.g. a10, mi300x_vf)
+PRECISION="${PRECISION:-fp32}"              # fp32 | fp64
 SEEDS="${SEEDS:-0 1 2 3 4}"
 DAMPING="${DAMPING:-0.85}"
 MAX_ITER="${MAX_ITER:-100}"
@@ -30,10 +33,14 @@ if [[ -z "$DEVICE_TAG" ]]; then
     fi
 fi
 
-OUT_DIR="$ROOT/results/${DEVICE_TAG}"
+if [[ "$PRECISION" != "fp32" && "$PRECISION" != "fp64" ]]; then
+    echo "PRECISION must be fp32 or fp64, got $PRECISION" >&2; exit 2
+fi
+
+OUT_DIR="$ROOT/results/${DEVICE_TAG}/${PRECISION}"
 mkdir -p "$OUT_DIR"
 
-echo "[run_re0] backend=$GPU_BACKEND tag=$DEVICE_TAG build=$BUILD_DIR out=$OUT_DIR"
+echo "[run_re0] backend=$GPU_BACKEND tag=$DEVICE_TAG precision=$PRECISION build=$BUILD_DIR out=$OUT_DIR"
 
 # --- 1. Build ---
 if [[ ! -x "$BUILD_DIR/pagerank" ]]; then
@@ -46,6 +53,7 @@ if [[ ! -x "$BUILD_DIR/pagerank" ]]; then
         cmake -S "$ROOT" -B "$BUILD_DIR" \
               -DGPU_BACKEND=ROCM \
               -DCMAKE_HIP_ARCHITECTURES="$HIP_ARCH" \
+              -DCMAKE_HIP_COMPILER=/opt/rocm/llvm/bin/amdclang++ \
               -DCMAKE_PREFIX_PATH=/opt/rocm \
               -DCMAKE_BUILD_TYPE=Release
     fi
@@ -72,14 +80,15 @@ for csr in "${csrs[@]}"; do
             echo "[run_re0] skip (exists) $out"
             continue
         fi
-        echo "[run_re0] $base seed=$seed -> $out.bin"
+        echo "[run_re0] $base seed=$seed precision=$PRECISION -> $out.bin"
         # Note: --seed wires no kernel state today; multiple runs still reveal
-        # cross-run variance because atomicAdd<float> ordering depends on warp
+        # cross-run variance because atomicAdd<T> ordering depends on warp
         # scheduling, not on RNG.
         "$PR_BIN" \
             --graph "$csr" \
             --out "$out" \
             --dataset "$base" \
+            --precision "$PRECISION" \
             --damping "$DAMPING" \
             --max-iter "$MAX_ITER" \
             --tol "$TOL"

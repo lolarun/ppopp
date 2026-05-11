@@ -1,0 +1,27 @@
+{
+  "a": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/mi300x_vf/fp32/web-google_seed0",
+    "vendor": "amd",
+    "device": "AMD Instinct MI300X VF",
+    "crc32": "f59cae91",
+    "iters_run": 62
+  },
+  "b": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/mi300x_vf/fp32/web-google_seed3",
+    "vendor": "amd",
+    "device": "AMD Instinct MI300X VF",
+    "crc32": "e0adf4b0",
+    "iters_run": 62
+  },
+  "dataset": "web-google",
+  "precision": "fp32",
+  "N": 875713,
+  "byte_diff_fraction": 0.9932192396367303,
+  "max_Linf": 1.7462298274040222e-09,
+  "mean_diff": 4.1374416678819017e-13,
+  "L2_norm": 4.5876065057606774e-09,
+  "rank_top100_jaccard": 1.0,
+  "rank_top100_kendall": 1.0,
+  "decision": "GO",
+  "decision_reason": "byte_diff_fraction > 1% -> drift confirmed"
+}

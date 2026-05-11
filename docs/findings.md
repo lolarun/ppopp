@@ -171,6 +171,38 @@ MI300X VF (1/8 core slice) is essentially **tied with A10** on livejournal (memo
 
 ---
 
+## F7 — FP64 drift magnitude drops ~10⁹ but byte_diff_fraction is comparable
+
+**Date**: 2026-05-11 (post FP64 templatization)
+**Status**: observed (A10 only — MI300X re-run pending Phase 1)
+**Significance**: high (paper §4 tolerance-derivation core argument)
+
+**Observation**: Same A10, same 3 datasets, 5 seeds each, comparing FP32 vs FP64 intra-vendor pairwise drift:
+
+| Dataset | nv-nv pair count | max L∞ (FP32) | max L∞ (FP64) | byte_diff median (FP32) | byte_diff median (FP64) |
+|---|---|---|---|---|---|
+| livejournal | 10 | 2.62e-10 | **3.25e-19** | 32.37% | 55.44% |
+| rmat-22 | 10 | 2.56e-09 | **2.60e-18** | 32.67% | 32.00% |
+| web-google | 10 | 6.40e-10 | **1.41e-18** | 69.69% | 71.54% |
+
+- Numerical drift magnitude drops **~10⁹× (1 billion fold) going FP32 → FP64**. Consistent with the ratio of FP32 ULP (2⁻²³ ≈ 1.2e-7) to FP64 ULP (2⁻⁵² ≈ 2.2e-16) at unit PR values.
+- **byte_diff_fraction is comparable (within same order)**. FP64's 52-bit mantissa means even tiny perturbations flip many low-order bits — the *fraction* of bytes that differ stays similar even though the *magnitude* of the differences shrinks dramatically.
+- A surprise micro-finding: FP64 rmat-22 5 seeds all converged to `final_l1 = 1.840e-7` to 4 sig figs (vs FP32's 3.04/3.12/3.14/3.10/3.14). FP64 reaches a stable **global** convergence indicator, but per-vertex values still wiggle within ULP.
+
+**Evidence**:
+- `results/a10_sm86/fp32/*` and `results/a10_sm86/fp64/*` (30 + 30 files)
+- `results/_compare/fp32/*` and `results/_compare/fp64/*`
+- Aggregated by `scripts/re0_summary.py`
+
+**Interpretation**: This is the **clearest empirical justification yet for principled (precision-derived) tolerance over hand-tuned epsilon**. A reviewer's natural intuition — "just use ε = 1e-6 and call it done" — fails at FP64 because the relevant drift scale is 1e-18, eight orders below typical "reasonable" hand-tuned values. A principled tolerance ε = reduction_depth × machine_eps × max_input scales correctly with precision: ε(FP32) ≈ depth × 1.2e-7 × max; ε(FP64) ≈ depth × 2.2e-16 × max. Direct match to F7's observed magnitude ratio.
+
+**Implications**:
+- **Paper §4 (Certificate Design) gains a concrete number**: "tolerance must scale with precision, not be hand-tuned". F7 provides the ~10⁹ scaling factor as evidence.
+- **§7 (Verifier Coverage)** error injection should be run at both FP32 and FP64 — small injected errors that are 100x machine_eps look very different at the two precisions.
+- **Open question** (pending Phase 1 MI300X FP64): does cross-vendor FP64 drift scale the same way? Hypothesis: yes — vendor switching layers on the same per-precision ULP-bounded drift. RE1 confirms or refutes.
+
+---
+
 ## Index
 
 | F# | Title | Significance | Status |
@@ -181,3 +213,4 @@ MI300X VF (1/8 core slice) is essentially **tied with A10** on livejournal (memo
 | F4 | livejournal smallest drift despite largest graph | medium | observed |
 | F5 | MI300X VF perf is graph-structure-dependent | medium | observed |
 | F6 | numpy version delta does not break CSR bytes | low | replicated |
+| F7 | FP64 drift magnitude ~10⁹× smaller, byte_diff_fraction comparable | high | observed (A10 only) |

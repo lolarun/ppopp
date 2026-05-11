@@ -1,0 +1,27 @@
+{
+  "a": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/a10_sm86/fp64/web-google_seed0",
+    "vendor": "nvidia",
+    "device": "NVIDIA A10",
+    "crc32": "44b32ca7",
+    "iters_run": 62
+  },
+  "b": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/a10_sm86/fp64/web-google_seed2",
+    "vendor": "nvidia",
+    "device": "NVIDIA A10",
+    "crc32": "75af2424",
+    "iters_run": 62
+  },
+  "dataset": "web-google",
+  "precision": "fp64",
+  "N": 875713,
+  "byte_diff_fraction": 0.7099643376311645,
+  "max_Linf": 1.4094628242311558e-18,
+  "mean_diff": 1.8069997679320634e-22,
+  "L2_norm": 3.385963267252576e-18,
+  "rank_top100_jaccard": 1.0,
+  "rank_top100_kendall": 1.0,
+  "decision": "GO",
+  "decision_reason": "byte_diff_fraction > 1% -> drift confirmed"
+}

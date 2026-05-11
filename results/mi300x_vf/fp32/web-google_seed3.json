@@ -1,0 +1,17 @@
+{
+  "vendor": "amd",
+  "device": "AMD Instinct MI300X VF",
+  "dataset": "web-google",
+  "graph_path": "data/cache/web-google.csr.bin",
+  "N": 875713,
+  "E": 5105039,
+  "damping": 0.85000002,
+  "max_iter": 100,
+  "tol": 9.99999997e-07,
+  "iters_run": 62,
+  "final_l1": 9.99924396e-07,
+  "wall_ms": 26.681,
+  "output_bin": "results/mi300x_vf/fp32/web-google_seed3.bin",
+  "output_crc32": "e0adf4b0",
+  "precision": "fp32"
+}

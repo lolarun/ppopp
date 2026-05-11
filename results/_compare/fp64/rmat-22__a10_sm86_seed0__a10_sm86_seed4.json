@@ -1,0 +1,27 @@
+{
+  "a": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/a10_sm86/fp64/rmat-22_seed0",
+    "vendor": "nvidia",
+    "device": "NVIDIA A10",
+    "crc32": "14a72849",
+    "iters_run": 9
+  },
+  "b": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/a10_sm86/fp64/rmat-22_seed4",
+    "vendor": "nvidia",
+    "device": "NVIDIA A10",
+    "crc32": "73a1903b",
+    "iters_run": 9
+  },
+  "dataset": "rmat-22",
+  "precision": "fp64",
+  "N": 2396110,
+  "byte_diff_fraction": 0.31329321274899735,
+  "max_Linf": 2.3852447794681098e-18,
+  "mean_diff": 7.636627137172531e-23,
+  "L2_norm": 4.254118112847916e-18,
+  "rank_top100_jaccard": 1.0,
+  "rank_top100_kendall": 1.0,
+  "decision": "GO",
+  "decision_reason": "byte_diff_fraction > 1% -> drift confirmed"
+}

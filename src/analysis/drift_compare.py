@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Compare two PageRank output binaries (FP32) and emit RE0 drift metrics.
+"""Compare two PageRank output binaries (FP32 or FP64) and emit drift metrics.
 
 Inputs:  two `<prefix>.bin` files plus their sidecar `<prefix>.json` produced
-         by src/pagerank.hip.
+         by src/pagerank/pagerank.hip. The `.json` records `"precision"` and
+         that drives the dtype used to load the `.bin`.
 
 Metrics (per the RE0 spec in docs/design/03_experimental_design.md):
-    byte_diff_fraction : count(a_bytes != b_bytes) at float32 granularity / N
+    byte_diff_fraction : count(a_bytes != b_bytes) at element granularity / N
     max_Linf           : max |a[i] - b[i]|
     mean_diff          : mean |a[i] - b[i]|
     L2_norm            : ||a - b||_2
@@ -16,6 +17,10 @@ Decision logic from RE0:
     byte_diff_fraction > 0.01  -> GO (drift confirmed)
     0.001 <= ... <= 0.01       -> GO with caveats
     < 0.001                    -> STOP (hypothesis falsified)
+
+Fails fast if A and B were generated at different precisions — drift at
+fp32 vs fp64 is a separate (also interesting) experiment, not the
+within-precision drift this script reports.
 """
 import argparse
 import json
@@ -24,13 +29,25 @@ from pathlib import Path
 
 import numpy as np
 
+_DTYPE_BY_PRECISION = {
+    "fp32": np.float32,
+    "fp64": np.float64,
+}
+_BYTE_VIEW_BY_PRECISION = {
+    "fp32": np.uint32,
+    "fp64": np.uint64,
+}
+
 
 def load_pair(prefix: Path):
     bin_path = prefix.with_suffix(".bin")
     json_path = prefix.with_suffix(".json")
-    arr = np.fromfile(bin_path, dtype=np.float32)
     meta = json.loads(json_path.read_text())
-    return arr, meta
+    prec = meta.get("precision", "fp32")
+    if prec not in _DTYPE_BY_PRECISION:
+        raise SystemExit(f"unknown precision {prec!r} in {json_path}")
+    arr = np.fromfile(bin_path, dtype=_DTYPE_BY_PRECISION[prec])
+    return arr, meta, prec
 
 
 def kendall_tau_top(a_idx, b_idx):
@@ -63,18 +80,21 @@ def main():
                     help="Write JSON result here; else print to stdout")
     args = ap.parse_args()
 
-    a, meta_a = load_pair(args.a)
-    b, meta_b = load_pair(args.b)
+    a, meta_a, prec_a = load_pair(args.a)
+    b, meta_b, prec_b = load_pair(args.b)
+    if prec_a != prec_b:
+        print(f"ERROR: precision mismatch a={prec_a} b={prec_b} — "
+              f"this script compares within-precision drift only",
+              file=sys.stderr)
+        sys.exit(2)
     if a.size != b.size:
         print(f"ERROR: vector size mismatch a={a.size} b={b.size}", file=sys.stderr)
         sys.exit(2)
     N = a.size
 
-    a_bytes = a.tobytes()
-    b_bytes = b.tobytes()
-    bytes_per_elem = 4
-    diff_mask = np.frombuffer(a_bytes, dtype=np.uint32) != \
-                np.frombuffer(b_bytes, dtype=np.uint32)
+    byte_view = _BYTE_VIEW_BY_PRECISION[prec_a]
+    diff_mask = np.frombuffer(a.tobytes(), dtype=byte_view) != \
+                np.frombuffer(b.tobytes(), dtype=byte_view)
     byte_diff_fraction = float(diff_mask.mean())
 
     diff = np.abs(a.astype(np.float64) - b.astype(np.float64))
@@ -108,6 +128,7 @@ def main():
               "device": meta_b.get("device"), "crc32": meta_b.get("output_crc32"),
               "iters_run": meta_b.get("iters_run")},
         "dataset": meta_a.get("dataset"),
+        "precision": prec_a,
         "N": int(N),
         "byte_diff_fraction": byte_diff_fraction,
         "max_Linf": max_linf,
