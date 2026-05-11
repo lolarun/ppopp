@@ -1,0 +1,27 @@
+{
+  "a": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/a10_sm86/fp64/road-CA_seed0",
+    "vendor": "nvidia",
+    "device": "NVIDIA A10",
+    "crc32": "c8321d78",
+    "iters_run": 57
+  },
+  "b": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/a10_sm86/fp64/road-CA_seed4",
+    "vendor": "nvidia",
+    "device": "NVIDIA A10",
+    "crc32": "715a908b",
+    "iters_run": 57
+  },
+  "dataset": "road-CA",
+  "precision": "fp64",
+  "N": 1965206,
+  "byte_diff_fraction": 0.2580584427281415,
+  "max_Linf": 6.352747104407253e-22,
+  "mean_diff": 2.6155771822433866e-23,
+  "L2_norm": 7.646579650559784e-20,
+  "rank_top100_jaccard": 1.0,
+  "rank_top100_kendall": 1.0,
+  "decision": "GO",
+  "decision_reason": "byte_diff_fraction > 1% -> drift confirmed"
+}

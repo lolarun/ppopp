@@ -1,0 +1,17 @@
+{
+  "vendor": "nvidia",
+  "device": "NVIDIA A10",
+  "dataset": "as-skitter",
+  "graph_path": "/root/ppopp-2027/data/cache/as-skitter.csr.bin",
+  "N": 1696415,
+  "E": 11095298,
+  "damping": 0.8500000000,
+  "max_iter": 100,
+  "tol": 1.0000000000e-06,
+  "iters_run": 13,
+  "final_l1": 5.7499960349e-07,
+  "wall_ms": 45.017,
+  "output_bin": "/root/ppopp-2027/results/a10_sm86/fp32/as-skitter_seed3.bin",
+  "output_crc32": "86551b64",
+  "precision": "fp32"
+}

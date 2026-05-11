@@ -1,0 +1,27 @@
+{
+  "a": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/a10_sm86/fp64/wiki-Talk_seed1",
+    "vendor": "nvidia",
+    "device": "NVIDIA A10",
+    "crc32": "424a63f8",
+    "iters_run": 40
+  },
+  "b": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/a10_sm86/fp64/wiki-Talk_seed4",
+    "vendor": "nvidia",
+    "device": "NVIDIA A10",
+    "crc32": "ca9994f9",
+    "iters_run": 40
+  },
+  "dataset": "wiki-Talk",
+  "precision": "fp64",
+  "N": 2394385,
+  "byte_diff_fraction": 0.9992887526442071,
+  "max_Linf": 4.87890977618477e-19,
+  "mean_diff": 1.2521599724108667e-22,
+  "L2_norm": 1.0339913515729683e-18,
+  "rank_top100_jaccard": 1.0,
+  "rank_top100_kendall": 1.0,
+  "decision": "GO",
+  "decision_reason": "byte_diff_fraction > 1% -> drift confirmed"
+}

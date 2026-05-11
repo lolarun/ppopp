@@ -1,0 +1,17 @@
+{
+  "vendor": "nvidia",
+  "device": "NVIDIA A10",
+  "dataset": "wiki-Talk",
+  "graph_path": "/root/ppopp-2027/data/cache/wiki-Talk.csr.bin",
+  "N": 2394385,
+  "E": 5021410,
+  "damping": 0.8500000000,
+  "max_iter": 100,
+  "tol": 1.0000000000e-06,
+  "iters_run": 40,
+  "final_l1": 9.4579757399e-07,
+  "wall_ms": 246.818,
+  "output_bin": "/root/ppopp-2027/results/a10_sm86/fp64/wiki-Talk_seed2.bin",
+  "output_crc32": "34cf32fc",
+  "precision": "fp64"
+}

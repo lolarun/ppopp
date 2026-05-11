@@ -1,0 +1,6 @@
+53cbb4463ee91148f8c6c62df8ab6c47dbedca69660080a7d3191bcc7501094d  data/cache/as-skitter.csr.bin
+65678da50fb189be52093e30c45c25dee0b1ff9978dbc74ff0082c81855200e9  data/cache/livejournal.csr.bin
+04a7468fc7331eb7f098c52cd6717971139b81ceb3f4b5eb643501eed8c95e96  data/cache/rmat-22.csr.bin
+175453de9ff66c416ad6c3379a48644150ba4a13b2d7fcb4eee8cbde4797057f  data/cache/road-CA.csr.bin
+34b91f06391170d74b28d37de3246ceaeca9d99d705cde8fb9fe122bb64465d1  data/cache/web-google.csr.bin
+f1ccbe286056541835cedf27f2c0e6b91a8ab0db21716f7dac8fbe0014754bf6  data/cache/wiki-Talk.csr.bin
