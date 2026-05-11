@@ -1,0 +1,26 @@
+{
+  "a": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/a10_sm86/livejournal_seed0",
+    "vendor": "nvidia",
+    "device": "NVIDIA A10",
+    "crc32": "ff80c766",
+    "iters_run": 49
+  },
+  "b": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/mi300x_vf/livejournal_seed4",
+    "vendor": "amd",
+    "device": "AMD Instinct MI300X VF",
+    "crc32": "1a50f439",
+    "iters_run": 49
+  },
+  "dataset": "livejournal",
+  "N": 4846609,
+  "byte_diff_fraction": 0.3854610512215861,
+  "max_Linf": 3.5652192309498787e-10,
+  "mean_diff": 1.6461776794902424e-14,
+  "L2_norm": 6.840001412635344e-10,
+  "rank_top100_jaccard": 1.0,
+  "rank_top100_kendall": 1.0,
+  "decision": "GO",
+  "decision_reason": "byte_diff_fraction > 1% -> drift confirmed"
+}

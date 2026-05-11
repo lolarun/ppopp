@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/root/ppopp-2027/build_gpu",
+  "command": "/opt/rocm/llvm/bin/amdclang++  -DUSE_GPU -DUSE_PROF_API=1 -D__HIP_PLATFORM_AMD__=1 -D__HIP_ROCclr__=1 -I/root/ppopp-2027/src -O3 -DNDEBUG -std=gnu++20 --offload-arch=gfx942 -o CMakeFiles/pagerank.dir/src/pagerank/pagerank.hip.o -x hip -c /root/ppopp-2027/src/pagerank/pagerank.hip",
+  "file": "/root/ppopp-2027/src/pagerank/pagerank.hip",
+  "output": "CMakeFiles/pagerank.dir/src/pagerank/pagerank.hip.o"
+}
+]

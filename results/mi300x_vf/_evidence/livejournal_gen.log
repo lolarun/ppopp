@@ -1,0 +1,5 @@
+[snap_to_csr] reading data/raw/livejournal.txt
+[snap_to_csr] read 68475391 edges
+[snap_to_csr] N=4846609 E=68475391
+[snap_to_csr] wrote data/cache/livejournal.csr.bin (293.3 MB)
+65678da50fb189be52093e30c45c25dee0b1ff9978dbc74ff0082c81855200e9  data/cache/livejournal.csr.bin

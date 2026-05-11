@@ -1,0 +1,17 @@
+{
+  "vendor": "nvidia",
+  "device": "NVIDIA A10",
+  "dataset": "livejournal",
+  "graph_path": "data/cache/livejournal.csr.bin",
+  "N": 4846609,
+  "E": 68475391,
+  "damping": 0.85000002,
+  "max_iter": 100,
+  "tol": 9.99999997e-07,
+  "iters_run": 49,
+  "final_l1": 9.52218045e-07,
+  "wall_ms": 416.227,
+  "output_bin": "results/a10_sm86/livejournal_seed4.bin",
+  "output_crc32": "178210d8",
+  "precision": "fp32"
+}

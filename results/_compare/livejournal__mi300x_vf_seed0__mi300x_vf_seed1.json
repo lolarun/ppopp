@@ -1,0 +1,26 @@
+{
+  "a": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/mi300x_vf/livejournal_seed0",
+    "vendor": "amd",
+    "device": "AMD Instinct MI300X VF",
+    "crc32": "f6095918",
+    "iters_run": 49
+  },
+  "b": {
+    "prefix": "/mnt/c/Users/Justin/Documents/Confs/ppopp-27/results/mi300x_vf/livejournal_seed1",
+    "vendor": "amd",
+    "device": "AMD Instinct MI300X VF",
+    "crc32": "6d3fc58c",
+    "iters_run": 49
+  },
+  "dataset": "livejournal",
+  "N": 4846609,
+  "byte_diff_fraction": 0.5577782321619095,
+  "max_Linf": 2.473825588822365e-10,
+  "mean_diff": 1.3059030955614266e-14,
+  "L2_norm": 3.958217903609353e-10,
+  "rank_top100_jaccard": 1.0,
+  "rank_top100_kendall": 1.0,
+  "decision": "GO",
+  "decision_reason": "byte_diff_fraction > 1% -> drift confirmed"
+}

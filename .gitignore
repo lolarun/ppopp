@@ -1,0 +1,32 @@
+# Build artifacts
+build/
+build_*/
+
+# Datasets (raw downloads + binary CSRs) — regenerable via scripts/
+data/raw/
+data/cache/
+
+# Raw PageRank output vectors (.bin = float32[N], ~3-19 MB each)
+# — large and regenerable from CSRs. The per-run *.json sidecars and
+#   _compare/*.json + _evidence/* DO get committed (paper evidence trail).
+results/*/*.bin
+
+# Transient tarballs created during host transfers
+*.tgz
+*.tar.gz
+
+# Local verification scratch
+.verify_mi300x/
+
+# Build outputs
+*.o
+*.obj
+
+# Python
+*.pyc
+__pycache__/
+
+# Editors
+.vscode/
+.idea/
+.DS_Store
