@@ -1,5 +1,0 @@
-[pagerank] vendor=amd device=AMD Instinct MI300X VF N=4846609 E=68475391 iters=49 l1=9.301e-07 wall=416.4ms crc=f6095918
-[pagerank] vendor=amd device=AMD Instinct MI300X VF N=4846609 E=68475391 iters=49 l1=9.461e-07 wall=416.1ms crc=6d3fc58c
-[pagerank] vendor=amd device=AMD Instinct MI300X VF N=4846609 E=68475391 iters=49 l1=9.402e-07 wall=416.6ms crc=7aefdbda
-[pagerank] vendor=amd device=AMD Instinct MI300X VF N=4846609 E=68475391 iters=49 l1=9.474e-07 wall=413.0ms crc=cb4ccab5
-[pagerank] vendor=amd device=AMD Instinct MI300X VF N=4846609 E=68475391 iters=49 l1=9.435e-07 wall=415.1ms crc=1a50f439

@@ -6,11 +6,8 @@ build_*/
 data/raw/
 data/cache/
 
-# Raw PageRank output vectors (.bin = float32[N] or float64[N], 3-40 MB each)
-# — large and regenerable from CSRs. The per-run *.json sidecars and
-#   _compare/**/*.json + _evidence/* DO get committed (paper evidence trail).
-# Recursive glob to catch results/<tag>/<precision>/*.bin layout.
-results/**/*.bin
+# Experiment results — regenerable by re-running experiments
+results/
 
 # Transient tarballs created during host transfers
 *.tgz
