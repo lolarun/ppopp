@@ -1,149 +1,228 @@
 #!/usr/bin/env python3
-"""Compare two PageRank output binaries (FP32 or FP64) and emit drift metrics.
-
-Inputs:  two `<prefix>.bin` files plus their sidecar `<prefix>.json` produced
-         by src/pagerank/pagerank.hip. The `.json` records `"precision"` and
-         that drives the dtype used to load the `.bin`.
-
-Metrics (per the RE0 spec in docs/design/03_experimental_design.md):
-    byte_diff_fraction : count(a_bytes != b_bytes) at element granularity / N
-    max_Linf           : max |a[i] - b[i]|
-    mean_diff          : mean |a[i] - b[i]|
-    L2_norm            : ||a - b||_2
-    rank_top100_jaccard: Jaccard overlap of top-100 indices
-    rank_top100_kendall: Kendall tau of top-100 ordering (only on overlap)
-
-Decision logic from RE0:
-    byte_diff_fraction > 0.01  -> GO (drift confirmed)
-    0.001 <= ... <= 0.01       -> GO with caveats
-    < 0.001                    -> STOP (hypothesis falsified)
-
-Fails fast if A and B were generated at different precisions — drift at
-fp32 vs fp64 is a separate (also interesting) experiment, not the
-within-precision drift this script reports.
 """
+drift_compare.py — Compare SSSP certificates from two GPU platforms.
+
+Reads JSONL run logs (one line per run), extracts d[] and pi[] arrays,
+and computes byte-level and magnitude drift statistics.
+
+Usage:
+    python3 -m analysis.drift_compare \
+        --jsonl-a results/run_a100_livejournal_fp32.jsonl \
+        --jsonl-b results/run_mi250_livejournal_fp32.jsonl \
+        --output  results/drift_livejournal_fp32.csv
+
+The JSONL lines must include "cert_d" (list of floats) and "cert_pi"
+(list of ints) fields.  These are only present when run with --emit-cert=1.
+For large graphs, use --cert-dir to read cert arrays from separate binary
+files referenced in the JSONL.
+"""
+
 import argparse
 import json
+import math
+import pathlib
+import struct
 import sys
-from pathlib import Path
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple
 
 import numpy as np
 
-_DTYPE_BY_PRECISION = {
-    "fp32": np.float32,
-    "fp64": np.float64,
-}
-_BYTE_VIEW_BY_PRECISION = {
-    "fp32": np.uint32,
-    "fp64": np.uint64,
-}
+
+# ── Data model ────────────────────────────────────────────────────────────────
+
+@dataclass
+class DriftReport:
+    dataset:        str
+    gpu_a:          str
+    gpu_b:          str
+    precision:      str
+    seed:           int
+    n_vertices:     int
+
+    # Distance drift
+    n_d_diff:       int           # bytes differ
+    d_diff_p50:     float
+    d_diff_p99:     float
+    d_diff_max:     float
+    d_rel_p50:      float         # relative: |Δd| / d_a
+    d_rel_p99:      float
+    d_rel_max:      float
+
+    # Predecessor drift
+    n_pi_diff:      int
+
+    # Verifier outcome
+    verdict_a:      str
+    verdict_b:      str
+    both_sat:       bool
+
+    # Metadata
+    algo:           str
+    rep:            int
 
 
-def load_pair(prefix: Path):
-    bin_path = prefix.with_suffix(".bin")
-    json_path = prefix.with_suffix(".json")
-    meta = json.loads(json_path.read_text())
-    prec = meta.get("precision", "fp32")
-    if prec not in _DTYPE_BY_PRECISION:
-        raise SystemExit(f"unknown precision {prec!r} in {json_path}")
-    arr = np.fromfile(bin_path, dtype=_DTYPE_BY_PRECISION[prec])
-    return arr, meta, prec
+# ── JSONL helpers ─────────────────────────────────────────────────────────────
+
+def _load_run(path: pathlib.Path) -> dict:
+    """Return the first valid JSONL line from path."""
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                continue
+    raise ValueError(f"No valid JSON line in {path}")
 
 
-def kendall_tau_top(a_idx, b_idx):
-    common = list(set(a_idx) & set(b_idx))
-    if len(common) < 2:
-        return float("nan")
-    rank_a = {v: i for i, v in enumerate(a_idx)}
-    rank_b = {v: i for i, v in enumerate(b_idx)}
-    n = len(common)
-    concord = discord = 0
-    for i in range(n):
-        for j in range(i + 1, n):
-            x, y = common[i], common[j]
-            sa = np.sign(rank_a[x] - rank_a[y])
-            sb = np.sign(rank_b[x] - rank_b[y])
-            if sa * sb > 0: concord += 1
-            elif sa * sb < 0: discord += 1
-    pairs = n * (n - 1) // 2
-    return (concord - discord) / pairs if pairs else float("nan")
+def _load_cert_arrays(run: dict, cert_dir: Optional[pathlib.Path]):
+    """
+    Return (d_array, pi_array) as numpy arrays.
+    Priority: inline 'cert_d'/'cert_pi' → external binary file.
+    """
+    if "cert_d" in run and run["cert_d"] is not None:
+        d  = np.array(run["cert_d"],  dtype=np.float64)
+        pi = np.array(run["cert_pi"], dtype=np.int64) if "cert_pi" in run else None
+        return d, pi
 
+    if cert_dir is not None:
+        run_id = run.get("run_id", "")
+        d_path  = cert_dir / f"{run_id}_d.bin"
+        pi_path = cert_dir / f"{run_id}_pi.bin"
+        if d_path.exists():
+            d  = np.fromfile(d_path,  dtype=np.float32)
+            pi = np.fromfile(pi_path, dtype=np.uint32) if pi_path.exists() else None
+            return d.astype(np.float64), pi
+    raise ValueError("No cert data in run log and --cert-dir not provided")
+
+
+# ── Core comparison ───────────────────────────────────────────────────────────
+
+def compare_runs(run_a: dict, run_b: dict,
+                 cert_dir: Optional[pathlib.Path] = None) -> DriftReport:
+    d_a, pi_a = _load_cert_arrays(run_a, cert_dir)
+    d_b, pi_b = _load_cert_arrays(run_b, cert_dir)
+
+    n_v = min(len(d_a), len(d_b))
+    d_a = d_a[:n_v]
+    d_b = d_b[:n_v]
+
+    INF = 1e30
+
+    # Mask to finite (reachable by both)
+    finite = (d_a < INF) & (d_b < INF)
+    diff_d = np.abs(d_a - d_b)
+
+    n_d_diff = int(np.sum(diff_d > 0))
+
+    # Magnitude stats (only finite vertices)
+    mags = diff_d[finite]
+    if len(mags) > 0:
+        d_diff_p50 = float(np.percentile(mags, 50))
+        d_diff_p99 = float(np.percentile(mags, 99))
+        d_diff_max = float(np.max(mags))
+        denom = np.maximum(d_a[finite], 1e-12)
+        rel   = mags / denom
+        d_rel_p50 = float(np.percentile(rel, 50))
+        d_rel_p99 = float(np.percentile(rel, 99))
+        d_rel_max = float(np.max(rel))
+    else:
+        d_diff_p50 = d_diff_p99 = d_diff_max = 0.0
+        d_rel_p50 = d_rel_p99 = d_rel_max = 0.0
+
+    n_pi_diff = 0
+    if pi_a is not None and pi_b is not None:
+        pi_a = pi_a[:n_v]
+        pi_b = pi_b[:n_v]
+        n_pi_diff = int(np.sum(pi_a != pi_b))
+
+    verdict_a = run_a.get("verifier_verdict", "unknown")
+    verdict_b = run_b.get("verifier_verdict", "unknown")
+    both_sat  = (verdict_a == "SAT" and verdict_b == "SAT")
+
+    cfg_a = run_a.get("config", {})
+    cfg_b = run_b.get("config", {})
+
+    return DriftReport(
+        dataset    = run_a.get("dataset", {}).get("name", "unknown"),
+        gpu_a      = run_a.get("hardware", {}).get("gpu", "gpu_a"),
+        gpu_b      = run_b.get("hardware", {}).get("gpu", "gpu_b"),
+        precision  = cfg_a.get("precision", "fp32"),
+        seed       = cfg_a.get("seed", 42),
+        n_vertices = n_v,
+        n_d_diff   = n_d_diff,
+        d_diff_p50 = d_diff_p50,
+        d_diff_p99 = d_diff_p99,
+        d_diff_max = d_diff_max,
+        d_rel_p50  = d_rel_p50,
+        d_rel_p99  = d_rel_p99,
+        d_rel_max  = d_rel_max,
+        n_pi_diff  = n_pi_diff,
+        verdict_a  = verdict_a,
+        verdict_b  = verdict_b,
+        both_sat   = both_sat,
+        algo       = cfg_a.get("algo", "unknown"),
+        rep        = run_a.get("rep", 0),
+    )
+
+
+# ── CSV output ────────────────────────────────────────────────────────────────
+
+CSV_HEADER = (
+    "dataset,gpu_a,gpu_b,precision,seed,n_vertices,"
+    "n_d_diff,d_diff_p50,d_diff_p99,d_diff_max,"
+    "d_rel_p50,d_rel_p99,d_rel_max,"
+    "n_pi_diff,verdict_a,verdict_b,both_sat,algo,rep\n"
+)
+
+def report_to_csv_row(r: DriftReport) -> str:
+    return (
+        f"{r.dataset},{r.gpu_a},{r.gpu_b},{r.precision},{r.seed},{r.n_vertices},"
+        f"{r.n_d_diff},{r.d_diff_p50:.6e},{r.d_diff_p99:.6e},{r.d_diff_max:.6e},"
+        f"{r.d_rel_p50:.6e},{r.d_rel_p99:.6e},{r.d_rel_max:.6e},"
+        f"{r.n_pi_diff},{r.verdict_a},{r.verdict_b},{r.both_sat},"
+        f"{r.algo},{r.rep}\n"
+    )
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--a", required=True, type=Path,
-                    help="Output prefix A (without .bin/.json)")
-    ap.add_argument("--b", required=True, type=Path,
-                    help="Output prefix B (without .bin/.json)")
-    ap.add_argument("--top-k", type=int, default=100)
-    ap.add_argument("--out", type=Path, default=None,
-                    help="Write JSON result here; else print to stdout")
+    ap = argparse.ArgumentParser(description="Compare SSSP certificates from two platforms")
+    ap.add_argument("--jsonl-a",  required=True,  help="JSONL run log from platform A")
+    ap.add_argument("--jsonl-b",  required=True,  help="JSONL run log from platform B")
+    ap.add_argument("--output",   required=True,  help="Output CSV path")
+    ap.add_argument("--cert-dir", default=None,   help="Directory with cert binary files")
+    ap.add_argument("--append",   action="store_true",
+                    help="Append to output CSV instead of overwriting")
     args = ap.parse_args()
 
-    a, meta_a, prec_a = load_pair(args.a)
-    b, meta_b, prec_b = load_pair(args.b)
-    if prec_a != prec_b:
-        print(f"ERROR: precision mismatch a={prec_a} b={prec_b} — "
-              f"this script compares within-precision drift only",
-              file=sys.stderr)
-        sys.exit(2)
-    if a.size != b.size:
-        print(f"ERROR: vector size mismatch a={a.size} b={b.size}", file=sys.stderr)
-        sys.exit(2)
-    N = a.size
+    cert_dir = pathlib.Path(args.cert_dir) if args.cert_dir else None
 
-    byte_view = _BYTE_VIEW_BY_PRECISION[prec_a]
-    diff_mask = np.frombuffer(a.tobytes(), dtype=byte_view) != \
-                np.frombuffer(b.tobytes(), dtype=byte_view)
-    byte_diff_fraction = float(diff_mask.mean())
+    run_a = _load_run(pathlib.Path(args.jsonl_a))
+    run_b = _load_run(pathlib.Path(args.jsonl_b))
 
-    diff = np.abs(a.astype(np.float64) - b.astype(np.float64))
-    max_linf = float(diff.max())
-    mean_diff = float(diff.mean())
-    l2 = float(np.linalg.norm(a.astype(np.float64) - b.astype(np.float64)))
+    report = compare_runs(run_a, run_b, cert_dir)
 
-    k = min(args.top_k, N)
-    top_a = np.argpartition(-a, k - 1)[:k]
-    top_a = top_a[np.argsort(-a[top_a])].tolist()
-    top_b = np.argpartition(-b, k - 1)[:k]
-    top_b = top_b[np.argsort(-b[top_b])].tolist()
-    jaccard = len(set(top_a) & set(top_b)) / len(set(top_a) | set(top_b))
-    kendall = kendall_tau_top(top_a, top_b)
+    out_path = pathlib.Path(args.output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    mode = "a" if args.append else "w"
+    with open(out_path, mode) as f:
+        if mode == "w":
+            f.write(CSV_HEADER)
+        f.write(report_to_csv_row(report))
 
-    if byte_diff_fraction > 0.01:
-        decision = "GO"
-        decision_reason = "byte_diff_fraction > 1% -> drift confirmed"
-    elif byte_diff_fraction >= 0.001:
-        decision = "GO_WITH_CAVEATS"
-        decision_reason = "0.1%-1% byte-different -> framing needs careful quantification"
-    else:
-        decision = "STOP"
-        decision_reason = "byte_diff_fraction < 0.1% -> drift hypothesis falsified"
-
-    result = {
-        "a": {"prefix": str(args.a), "vendor": meta_a.get("vendor"),
-              "device": meta_a.get("device"), "crc32": meta_a.get("output_crc32"),
-              "iters_run": meta_a.get("iters_run")},
-        "b": {"prefix": str(args.b), "vendor": meta_b.get("vendor"),
-              "device": meta_b.get("device"), "crc32": meta_b.get("output_crc32"),
-              "iters_run": meta_b.get("iters_run")},
-        "dataset": meta_a.get("dataset"),
-        "precision": prec_a,
-        "N": int(N),
-        "byte_diff_fraction": byte_diff_fraction,
-        "max_Linf": max_linf,
-        "mean_diff": mean_diff,
-        "L2_norm": l2,
-        "rank_top100_jaccard": jaccard,
-        "rank_top100_kendall": kendall,
-        "decision": decision,
-        "decision_reason": decision_reason,
-    }
-    text = json.dumps(result, indent=2)
-    if args.out:
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(text + "\n")
-    print(text)
+    # Summary to stdout
+    print(f"[drift_compare] {report.dataset}  {report.gpu_a} vs {report.gpu_b}")
+    print(f"  d diff: {report.n_d_diff}/{report.n_vertices} vertices "
+          f"({100*report.n_d_diff/max(1, report.n_vertices):.2f}%)")
+    print(f"  d_diff p50={report.d_diff_p50:.3e}  p99={report.d_diff_p99:.3e}  "
+          f"max={report.d_diff_max:.3e}")
+    print(f"  pi diff: {report.n_pi_diff}")
+    print(f"  verdicts: {report.verdict_a} / {report.verdict_b}  both_sat={report.both_sat}")
 
 
 if __name__ == "__main__":
