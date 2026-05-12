@@ -8,7 +8,7 @@
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RESULTS="$ROOT/results"
+RESULTS="${RESULTS_DIR:-$ROOT/results/pagerank}"
 DRIFT_PY="$ROOT/src/analysis/drift_compare.py"
 
 # Find all (tag, precision) combinations under results/
@@ -56,7 +56,7 @@ for prec in "${!precision_tags[@]}"; do
                         [[ -e "$b_bin" ]] || continue
                         seed_b="$(basename "$b_bin" .bin | sed -E 's/.*_seed//')"
                         out_json="$OUT/${ds}__${ta}_seed${seed_a}__${tb}_seed${seed_b}.json"
-                        python3 "$DRIFT_PY" \
+                        python "$DRIFT_PY" \
                             --a "$RESULTS/$ta/$prec/${ds}_seed${seed_a}" \
                             --b "$RESULTS/$tb/$prec/${ds}_seed${seed_b}" \
                             --out "$out_json" >/dev/null
@@ -76,7 +76,7 @@ for prec in "${!precision_tags[@]}"; do
                     seed_a="$(basename "${bins[i]}" .bin | sed -E 's/.*_seed//')"
                     seed_b="$(basename "${bins[j]}" .bin | sed -E 's/.*_seed//')"
                     out_json="$OUT/${ds}__${t}_seed${seed_a}__${t}_seed${seed_b}.json"
-                    python3 "$DRIFT_PY" \
+                    python "$DRIFT_PY" \
                         --a "$RESULTS/$t/$prec/${ds}_seed${seed_a}" \
                         --b "$RESULTS/$t/$prec/${ds}_seed${seed_b}" \
                         --out "$out_json" >/dev/null
@@ -87,7 +87,7 @@ for prec in "${!precision_tags[@]}"; do
 done
 
 # Summary table across all precisions
-python3 - <<'PY' "$RESULTS/_compare"
+python - <<'PY' "$RESULTS/_compare"
 import json, sys
 from pathlib import Path
 root = Path(sys.argv[1])

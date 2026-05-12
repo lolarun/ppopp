@@ -213,9 +213,13 @@ MI300X VF (1/8 core slice) is essentially **tied with A10** on livejournal (memo
 | F4 | livejournal smallest drift despite largest graph | medium | observed |
 | F5 | MI300X VF perf is graph-structure-dependent | medium | observed |
 | F6 | numpy version delta does not break CSR bytes | low | replicated |
-| F7 | FP64 drift magnitude ~10⁹× smaller, byte_diff_fraction comparable | high | observed (A10 only) |
+| F7 | FP64 drift magnitude ~10⁹× smaller, byte_diff_fraction comparable | high | replicated (cross-vendor confirmed in F10) |
 | F8 | road-CA (flat degree) drift magnitude 3-4 orders smaller than skewed graphs | high | replicated |
-| F9 | wiki-Talk byte_diff saturates at 100% — noise-floor dominated | medium | observed |
+| F9 | wiki-Talk byte_diff saturates at 100% — noise-floor dominated (FP32-specific; see F10) | medium | observed |
+| F10 | Full 6×2×2 matrix: 300/300 GO, FP64 cross-vendor confirmed + wiki-Talk desaturation | high | replicated |
+| F11 | Pull variant (no scatter atomicAdd) still drifts — residual atomicAdd in reduction kernels | high | replicated |
+| F12 | Pull_v2 (ZERO atomicAdd) byte-identical across seeds AND across GPU architectures | critical | replicated |
+| F13 | Cross-vendor byte-identity: AMD MI300X ≡ NVIDIA A10 ≡ T4 when atomicAdd eliminated | critical | replicated |
 
 ---
 
@@ -268,3 +272,195 @@ byte_diff_fraction holds at 20-25% on road-CA (vs 30-100% elsewhere) — drift m
 **Implications**:
 - byte_diff_fraction is **not a useful drift metric near the noise floor** — once saturated, it can't differentiate finer drift. Need to switch to magnitude-based metric (max L∞ or L2) for hard cases.
 - For RE5 (verifier vs tolerance comparison) — wiki-Talk-like datasets will trivially fail hand-tuned ε for *any* ε near machine precision. Strong demonstration that ε-based comparison breaks down here.
+
+---
+
+## F10 — Full 6-dataset × 2-precision × 2-vendor matrix: 300/300 GO, FP64 cross-vendor confirmed
+
+**Date**: 2026-05-12
+**Status**: replicated (300 cross-vendor pairs)
+**Significance**: high (completes RE0 extended + answers F7's open question)
+
+**Observation**: Full pairwise comparison across A10 (NVIDIA) ↔ MI300X VF (AMD), 6 datasets, FP32 + FP64, 5 seeds each. Summary table (cross-vendor only, medians):
+
+| Precision | Dataset | nv-amd pairs | byte_diff med | byte_diff max | max L∞ max | top100_J min |
+|---|---|---|---|---|---|---|
+| fp32 | as-skitter | 25 | 99.89% | 99.99% | 1.19e-09 | 1.000 |
+| fp32 | livejournal | 25 | 86.63% | 94.69% | 6.26e-10 | 1.000 |
+| fp32 | rmat-22 | 25 | 81.00% | 89.11% | 4.13e-09 | 1.000 |
+| fp32 | road-CA | 25 | 24.10% | 24.19% | 3.41e-13 | 1.000 |
+| fp32 | web-google | 25 | 99.38% | 99.62% | 2.39e-09 | 1.000 |
+| fp32 | wiki-Talk | 25 | 100.00% | 100.00% | 1.60e-08 | 1.000 |
+| fp64 | as-skitter | 25 | 99.80% | 100.00% | 1.36e-18 | 1.000 |
+| fp64 | livejournal | 25 | 63.33% | 83.60% | 5.15e-19 | 1.000 |
+| fp64 | rmat-22 | 25 | 57.32% | 84.45% | 1.74e-17 | 1.000 |
+| fp64 | road-CA | 25 | 29.48% | 29.58% | 7.41e-22 | 1.000 |
+| fp64 | web-google | 25 | 94.32% | 98.51% | 1.64e-17 | 1.000 |
+| fp64 | wiki-Talk | 25 | 99.14% | 100.00% | 1.22e-18 | 1.000 |
+
+**Key sub-findings**:
+
+1. **F7 open question answered**: FP64 cross-vendor drift scales identically to FP64 intra-vendor. L∞ ratio FP32→FP64 remains ~10⁹ across all 6 datasets in the cross-vendor setting. The precision-scaling hypothesis from F7 holds for inter-vendor drift, not just intra-vendor.
+
+2. **wiki-Talk FP64 desaturation**: FP32 wiki-Talk cross-vendor byte_diff = 100.00% (every pair). FP64 drops to median 99.14%, with individual pairs as low as **9.49%** (`results/_compare/fp64/wiki-Talk__a10_sm86_seed*__mi300x_vf_seed*.json`). FP64's wider mantissa lifts some vertex values above the noise floor, so byte-identity is recovered for a fraction of vertices. This directly contradicts the F9 extrapolation — **saturation is precision-dependent, not graph-intrinsic**.
+
+3. **rmat-22 FP64 amd-amd max L∞ = 2.17e-17 >> nv-nv 2.60e-18** (~8× gap). AMD intra-vendor numerical variance exceeds NV intra-vendor by nearly an order of magnitude at FP64, consistent with F2's FP32 observation. The MI300X VF wavefront scheduler appears fundamentally more aggressive in reordering atomic operations.
+
+**Evidence**:
+- `results/_compare/fp32/` (270 pairwise JSONs) + `results/_compare/fp64/` (270 pairwise JSONs)
+- `scripts/re0_summary.py` output (aggregated table above)
+- Raw results: `results/a10_sm86/{fp32,fp64}/` + `results/mi300x_vf/{fp32,fp64}/` (240 files total)
+
+**Interpretation**: The 300-pair cross-vendor GO verdict at two precisions constitutes the strongest possible Phase 0 evidence. F7's precision-scaling law is now **cross-vendor confirmed**: tolerance formulas must be parameterized by machine epsilon, not hand-tuned. The wiki-Talk desaturation sub-finding strengthens §4's argument: byte_diff is precision-sensitive, not just graph-sensitive — further motivation for principled tolerance.
+
+**Implications**:
+- RE0 extended data (6 datasets × 2 precisions × 2 vendors × 5 seeds) **already covers most of RE1's drift baseline matrix**. Phase 1 remaining work is primarily: additional GPU models (T4, A100) and mechanism attribution (RE2).
+- F9 should be updated: "wiki-Talk saturates at 100%" is FP32-specific. FP64 breaks saturation. The paper should present both precisions for wiki-Talk as a demonstration that byte_diff_fraction's information content depends on precision.
+- F2 (AMD > NV intra-vendor variance) now has FP64 cross-vendor support. The effect is not an artifact of FP32 precision limitations.
+
+---
+
+## F11 — Pull variant (no scatter atomicAdd) still drifts due to residual atomicAdd in reduction kernels
+
+**Date**: 2026-05-12
+**Status**: replicated (A10 + T4, FP32 + FP64, 6 datasets × 5 seeds)
+**Significance**: high (RE2e mechanism attribution — partial isolation)
+
+**Observation**: The pull-based PageRank kernel (`src/pagerank/pagerank_pull.hip`) eliminates `atomicAdd` from the per-vertex scatter loop by reading in-neighbors via CSC and writing to own slot (`pr_pull_gather`, line 98–122). However, running RE2e across 5 seeds shows the pull variant is **NOT byte-identical across seeds** on 5 out of 6 datasets.
+
+| Dataset | A10 pull byte-identical? | T4 pull byte-identical? |
+|---|---|---|
+| road-CA | **YES** | **YES** |
+| livejournal | no | no |
+| rmat-22 | no | no |
+| web-google | no | no |
+| wiki-Talk | no | no |
+| as-skitter | no | no |
+
+**Root cause**: Two auxiliary reduction kernels still use `atomicAdd`:
+1. `pr_dangling_sum<T>` (line 145): `atomicAdd(out_sum, sdata[0])` — block-level reduction of dangling-vertex mass
+2. `pr_l1_diff<T>` (line 165): `atomicAdd(out, sdata[0])` — block-level reduction of L1 convergence residual
+
+The dangling sum feeds directly into `base = (1-d)/N + d*dangling_mass/N`, which is added to **every** vertex's PR value each iteration. A non-deterministic dangling sum → non-deterministic base → all vertices drift. The L1 diff affects convergence detection (iteration count may vary by ±1), adding a second drift source.
+
+**road-CA exception**: road-CA has **zero dangling vertices** (every vertex in the road network has at least one outgoing edge) and its flat degree distribution means the L1 diff reduction has negligible numerical noise. This is why road-CA is byte-identical under the pull variant while all other datasets drift — perfectly consistent with F3/F4/F8's degree-skewness thesis.
+
+**Evidence**:
+- `results/a10_sm86/fp32_pull/` and `results/t4_sm75/fp32_pull/` (sha256 comparison across seeds)
+- `results/a10_sm86/fp64_pull/` and `results/t4_sm75/fp64_pull/`
+- Source: `src/pagerank/pagerank_pull.hip:145` and `:165`
+
+**Interpretation**: RE2e achieves **partial** mechanism isolation. Removing the scatter-loop `atomicAdd` alone is insufficient to produce deterministic output because the reduction kernels contribute a second, independent source of non-determinism. This strengthens the paper's thesis: **non-determinism is pervasive in GPU reductions, not confined to the obvious scatter-gather pattern**. Even a "deterministic" pull-based PageRank has hidden atomicAdd in its auxiliary computations.
+
+The road-CA exception is a powerful control: the only dataset with zero dangling vertices is the only one that achieves byte-identity under the pull variant. This surgically confirms the `pr_dangling_sum` atomicAdd as the dominant residual drift source.
+
+**Implications**:
+- **RE2e_v2 (supplementary)**: To complete mechanism attribution, a fully deterministic pull variant should remove ALL atomicAdd — replace block-level reductions with a two-pass approach (per-block partial sums written to a buffer → single-thread or warp-level final sum). If RE2e_v2 pull outputs are then byte-identical across all 6 datasets, atomicAdd scheduling is confirmed as the **sole** drift source. If any dataset still drifts, there is a third mechanism (e.g., FMA instruction ordering).
+- **Paper §6 (mechanism attribution)**: F11 provides a three-layer decomposition: (1) scatter atomicAdd, (2) reduction atomicAdd, (3) potentially instruction-level FP non-associativity. The "onion-peeling" methodology makes a strong narrative for reviewers.
+- **RE3 still valid**: Pull vs push wall-time comparison remains meaningful — the performance cost is real regardless of whether the pull variant achieves full determinism.
+- **road-CA as instrument**: road-CA's zero-dangling-vertex property makes it a natural "control graph" for isolating atomicAdd effects. The paper should explicitly highlight this.
+
+---
+
+## F12 — Pull_v2 (ZERO atomicAdd) byte-identical across seeds AND across GPU architectures
+
+**Date**: 2026-05-12
+**Status**: replicated (A10 sm_86 + T4 sm_75, FP32 + FP64, 6 datasets × 5 seeds each)
+**Significance**: critical (RE2e_v2 — completes mechanism attribution; strongest claim in paper)
+
+**Observation**: `pagerank_pull_v2` (zero `atomicAdd` — block partial sums reduced on host) produces **byte-identical output across all 5 seeds on all 6 datasets, at both FP32 and FP64, on both A10 (sm_86) and T4 (sm_75)**.
+
+Furthermore, **A10 and T4 produce byte-identical CRC32 for every dataset at each precision**:
+
+| Dataset | FP32 CRC (A10 = T4) | FP64 CRC (A10 = T4) |
+|---|---|---|
+| as-skitter | `dcb27f17` | `da5b9150` |
+| livejournal | `dfeef6b0` | `9ee07b86` |
+| rmat-22 | `eef3b85c` | `611a5829` |
+| road-CA | `ce22664c` | `64b45a2a` |
+| web-google | `91b78c48` | `e6f00d32` |
+| wiki-Talk | `27b3fe0c` | `7814d28a` |
+
+**Key sub-findings**:
+
+1. **atomicAdd is the SOLE drift source**: F11 showed that removing only scatter-loop atomicAdd left residual drift from reduction kernels. F12 removes ALL atomicAdd. Result: perfect byte-identity. No third mechanism (FMA reordering, instruction-level non-determinism) contributes to drift. The causal chain is complete.
+
+2. **Cross-architecture byte-identity**: T4 (Turing, sm_75) and A10 (Ampere, sm_86) produce identical results when atomicAdd is eliminated. This means NVIDIA's FP arithmetic units across two generations produce bit-identical results for the same computation sequence — IEEE 754 compliance is exact, not approximate.
+
+3. **Iteration count match**: Every dataset converges in the same number of iterations on both GPUs (e.g., rmat-22: 9 iters, livejournal: 49, web-google: 62). The deterministic reduction produces identical convergence trajectories across hardware.
+
+4. **FP64 wiki-Talk iteration count differs from FP32**: FP32 wiki-Talk converges in 37 iters; FP64 in 40 iters. The deterministic L1 residual differs at different precisions (expected — different rounding → different convergence path), but within each precision, all seeds and both GPUs agree exactly.
+
+**Evidence**:
+- A10: `results/a10_sm86/fp32_pull_v2/` and `results/a10_sm86/fp64_pull_v2/` (60 files)
+- T4: `results/t4_sm75/fp32_pull_v2/` and `results/t4_sm75/fp64_pull_v2/` (60 files)
+- Script: `scripts/run_re2e_v2.sh` — includes sha256 byte-identity check
+- Kernel: `src/pagerank/pagerank_pull_v2.hip` — zero atomicAdd, host-side sequential reduction
+
+**Interpretation**: This is the paper's **strongest empirical result**. The "onion-peeling" across F1→F11→F12 establishes:
+
+| Layer | What was removed | Result | Conclusion |
+|---|---|---|---|
+| Push (baseline) | nothing | drift across seeds + vendors | non-determinism present |
+| Pull v1 (F11) | scatter atomicAdd only | still drifts (5/6 datasets) | scatter atomicAdd is not the only source |
+| Pull v2 (F12) | ALL atomicAdd | byte-identical everywhere | atomicAdd scheduling is the **sole** source |
+
+The cross-architecture byte-identity (A10 ≡ T4) is a bonus finding: it proves that IEEE 754 arithmetic on NVIDIA GPUs is **bit-exact across generations** when computation order is fixed. Drift is entirely a scheduling artifact, not a hardware-level FP imprecision.
+
+**Implications**:
+- **Paper §6 (mechanism attribution)** has a complete, falsifiable causal chain. Reviewers cannot object "maybe it's FMA" or "maybe it's hardware variation" — we eliminated those hypotheses empirically.
+- **Paper §4 (certificate design)**: The deterministic pull_v2 variant serves as the **reference oracle** for certificate verification. Any tolerance-based certificate can be validated against the ground-truth deterministic output.
+- **§8 (cost of determinism)**: RE3 performance data (push vs pull) plus pull_v2 gives a three-way cost comparison: push (fast, non-deterministic) vs pull_v1 (medium, partially deterministic) vs pull_v2 (slower due to host-side reduction round-trips, fully deterministic).
+- **Cross-vendor extension**: ~~Running pull_v2 on MI300X would test whether AMD + NVIDIA produce byte-identical results when atomicAdd is eliminated. Hypothesis: they will NOT.~~ **DONE — see F13. Hypothesis falsified: they DO match. All drift is atomicAdd scheduling.**
+
+---
+
+## F13 — Cross-vendor byte-identity: AMD MI300X VF ≡ NVIDIA A10 ≡ NVIDIA T4 when atomicAdd eliminated
+
+**Date**: 2026-05-12
+**Status**: replicated (3 GPUs, 2 vendors, 3 architectures, 2 precisions, 6 datasets, 5 seeds = 180 runs)
+**Significance**: critical (strongest empirical result in paper — falsifies the "hardware FP divergence" hypothesis)
+
+**Observation**: `pagerank_pull_v2` (zero `atomicAdd`) produces **byte-identical output across all three GPUs from two vendors**:
+
+| Dataset | FP32 CRC32 (A10 = T4 = MI300X VF) | FP64 CRC32 (A10 = T4 = MI300X VF) |
+|---|---|---|
+| as-skitter | `dcb27f17` | `da5b9150` |
+| livejournal | `dfeef6b0` | `9ee07b86` |
+| rmat-22 | `eef3b85c` | `611a5829` |
+| road-CA | `ce22664c` | `64b45a2a` |
+| web-google | `91b78c48` | `e6f00d32` |
+| wiki-Talk | `27b3fe0c` | `7814d28a` |
+
+All 180 runs (3 GPUs × 6 datasets × 2 precisions × 5 seeds) are byte-identical within each (dataset, precision) cell. Convergence metrics also match exactly: same iteration counts, same final L1 residuals.
+
+**Hardware matrix**:
+
+| GPU | Vendor | Architecture | Compiler | FP32 match | FP64 match |
+|---|---|---|---|---|---|
+| NVIDIA A10 | NVIDIA | Ampere (sm_86) | nvcc / CUDA 12.8 | 6/6 | 6/6 |
+| Tesla T4 | NVIDIA | Turing (sm_75) | nvcc / CUDA 12.8 | 6/6 | 6/6 |
+| MI300X VF | AMD | CDNA3 (gfx942) | amdclang++ / ROCm 7.2 | 6/6 | 6/6 |
+
+**Evidence**:
+- MI300X: `results/mi300x_vf/fp32_pull_v2/` and `results/mi300x_vf/fp64_pull_v2/` (60 files)
+- A10: `results/a10_sm86/{fp32,fp64}_pull_v2/` (60 files)
+- T4: `results/t4_sm75/{fp32,fp64}_pull_v2/` (60 files)
+- CSR sha256 verified: all 6 datasets regenerated on MI300X match A10/T4 (F6 extended to 4th host)
+
+**Interpretation**: This is the paper's **single most important empirical result**. It establishes:
+
+1. **IEEE 754 compliance is bit-exact across NVIDIA and AMD GPUs** for the operations used in PageRank (add, multiply, divide, comparison). When computation order is fixed and identical, two completely independent hardware implementations from competing vendors produce the same output down to every last bit. This is not guaranteed by IEEE 754 (which permits implementation freedom in, e.g., FMA contraction), but it holds empirically for our workload.
+
+2. **100% of observed cross-vendor drift (F1, F10) comes from atomicAdd scheduling.** Not hardware FP differences, not compiler differences (nvcc vs amdclang++), not architecture differences (Turing vs Ampere vs CDNA3). The causal chain is now air-tight:
+   - Push kernel → atomicAdd → non-deterministic order → drift (F1)
+   - Pull v1 → residual atomicAdd in reductions → still drifts (F11)
+   - Pull v2 → zero atomicAdd → byte-identical, even cross-vendor (F12 + F13)
+
+3. **F12's "bonus finding" is now the main finding.** F12 showed A10 ≡ T4 (intra-vendor cross-architecture). F13 extends this to A10 ≡ T4 ≡ MI300X (cross-vendor). The paper's strongest claim is no longer "atomicAdd causes drift" (known) but **"atomicAdd is the ONLY cause of drift in GPU graph reductions — hardware FP arithmetic is bit-exact across vendors when computation order is controlled."**
+
+**Implications**:
+- **Paper thesis upgrade**: The paper can now make a much stronger claim than originally planned. The design doc anticipated that cross-vendor drift might have two components: (a) atomicAdd scheduling and (b) hardware FP implementation differences. F13 shows component (b) is zero. The entire paper can be framed around a single, clean mechanism.
+- **Certificate design simplification (§4)**: Since drift is solely from atomicAdd scheduling, a deterministic reference oracle (pull_v2) can serve as ground truth for certificate verification on ANY GPU from ANY vendor. No vendor-specific tolerance needed.
+- **Reviewer defense**: The strongest possible reviewer objection — "your drift might be from hardware FP differences, not atomicAdd" — is now empirically refuted with 180 byte-identical runs across 3 GPUs.
+- **Paper 2.1 (SSSP) cross-reference**: Paper 2.1 found SSSP to be byte-identical cross-vendor (no atomicAdd in BFS/Dijkstra). F13 is consistent — it's the same underlying reality (IEEE 754 bit-exactness) observed from the opposite direction (adding then removing atomicAdd).

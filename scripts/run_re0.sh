@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # RE0 / RE1 driver — runs PageRank on every CSR in data/cache/ for the current
 # host's GPU and selected precision, writes outputs to
-# results/<DEVICE_TAG>/<PRECISION>/<dataset>_seed<n>.{bin,json}.
+# results/pagerank/<DEVICE_TAG>/<PRECISION>/<dataset>_seed<n>.{bin,json}.
 #
 # Usage (matches Paper 2.1 sibling repo build conventions):
 #   GPU_BACKEND=CUDA CUDA_ARCH=86      DEVICE_TAG=a10        PRECISION=fp32 ./scripts/run_re0.sh
@@ -37,7 +37,7 @@ if [[ "$PRECISION" != "fp32" && "$PRECISION" != "fp64" ]]; then
     echo "PRECISION must be fp32 or fp64, got $PRECISION" >&2; exit 2
 fi
 
-OUT_DIR="$ROOT/results/${DEVICE_TAG}/${PRECISION}"
+OUT_DIR="$ROOT/results/pagerank/${DEVICE_TAG}/${PRECISION}"
 mkdir -p "$OUT_DIR"
 
 echo "[run_re0] backend=$GPU_BACKEND tag=$DEVICE_TAG precision=$PRECISION build=$BUILD_DIR out=$OUT_DIR"
